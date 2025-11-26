@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 import '../model/delivery_model.dart';
-import '../components/delivery_card.dart'; // <-- your card
+import '../components/delivery_card.dart';
 
 class DeliveriesSection extends StatefulWidget {
   const DeliveriesSection({super.key});
@@ -15,8 +15,6 @@ class DeliveriesSection extends StatefulWidget {
 
 class _DeliveriesSectionState extends State<DeliveriesSection> {
   final List<Delivery> _deliveries = [];
-  final ScrollController _scrollController = ScrollController();
-
   bool _isLoading = false;
   bool _hasMore = true;
   int _currentPage = 1;
@@ -25,16 +23,6 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
   void initState() {
     super.initState();
     _fetchDeliveries();
-
-    // Pagination listener
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - 200 &&
-          !_isLoading &&
-          _hasMore) {
-        _fetchDeliveries();
-      }
-    });
   }
 
   Future<void> _fetchDeliveries() async {
@@ -48,7 +36,7 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
 
       final url = Uri.parse(
         "https://staging-gdtms-v2.skyward.com.ph/api/mbl/deliveries"
-        "?active=true&per_page=10&page=$_currentPage",
+        "?active=true&per_page=5&page=$_currentPage",
       );
 
       final response = await http.get(
@@ -60,16 +48,14 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
         final decoded = json.decode(response.body);
         final List<dynamic> newData = decoded['data'];
 
-        // Convert JSON → Delivery model
         List<Delivery> newDeliveries = newData
             .map((e) => Delivery.fromJson(e))
             .toList();
 
         setState(() {
+          _deliveries.clear();
           _deliveries.addAll(newDeliveries);
-          _currentPage++;
-
-          if (newDeliveries.length < 10) _hasMore = false;
+          _hasMore = newDeliveries.length == 5;
         });
       } else {
         debugPrint("Failed: ${response.statusCode}");
@@ -79,6 +65,20 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
     }
 
     setState(() => _isLoading = false);
+  }
+
+  void _previousPage() {
+    if (_currentPage > 1) {
+      setState(() => _currentPage--);
+      _fetchDeliveries();
+    }
+  }
+
+  void _nextPage() {
+    if (_hasMore) {
+      setState(() => _currentPage++);
+      _fetchDeliveries();
+    }
   }
 
   @override
@@ -93,23 +93,91 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
       return const Center(child: Text("No deliveries found."));
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _deliveries.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _deliveries.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
-            ),
-          );
-        }
+    return Column(
+      children: [
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _deliveries.length,
+          itemBuilder: (context, index) {
+            return DeliveryCard(delivery: _deliveries[index]);
+          },
+        ),
+        const SizedBox(height: 1),
 
-        return DeliveryCard(delivery: _deliveries[index]);
-      },
+        // ------------------------ IMPROVED CENTERED PAGINATION ------------------------
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12.0,
+          ), // aligns with card edges
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Previous Button
+                GestureDetector(
+                  onTap: _currentPage > 1 && !_isLoading ? _previousPage : null,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _currentPage > 1 && !_isLoading
+                          ? Colors.green.shade50
+                          : Colors.grey.shade200,
+                    ),
+                    child: Icon(
+                      Icons.arrow_left,
+                      color: _currentPage > 1 && !_isLoading
+                          ? Colors.green
+                          : Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Page Number
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    "$_currentPage",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Next Button
+                GestureDetector(
+                  onTap: _hasMore && !_isLoading ? _nextPage : null,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _hasMore && !_isLoading
+                          ? Colors.green.shade50
+                          : Colors.grey.shade200,
+                    ),
+                    child: Icon(
+                      Icons.arrow_right,
+                      color: _hasMore && !_isLoading
+                          ? Colors.green
+                          : Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
