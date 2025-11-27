@@ -43,6 +43,10 @@ class _LoginCardState extends State<LoginCard> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("auth_token", data["data"]["token"]);
 
+        // ✅ Set expiry 24 hours from now
+        final expiry = DateTime.now().add(const Duration(hours: 24));
+        await prefs.setString("auth_token_expiry", expiry.toIso8601String());
+
         // Navigate to Dashboard
         Navigator.pushReplacement(
           context,
@@ -143,9 +147,9 @@ class _InputSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         StyledTextBox(
-          label: 'PIN',
+          label: 'Password',
           obscureText: true,
-          keyboardType: TextInputType.number,
+          keyboardType: TextInputType.text,
           controller: pinController,
         ),
         Align(

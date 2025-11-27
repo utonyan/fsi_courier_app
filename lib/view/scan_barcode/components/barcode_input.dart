@@ -160,7 +160,7 @@ class _BarcodeInputState extends State<BarcodeInput> {
                       TextField(
                         controller: _controller,
                         decoration: InputDecoration(
-                          hintText: "Barcode or ID",
+                          hintText: "Barcode",
                           prefixIcon: const Icon(
                             Icons.qr_code_2_rounded,
                             color: Colors.black54,
