@@ -14,13 +14,12 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  // Used to rebuild DeliveriesSection when refreshed
   Key _deliveriesKey = UniqueKey();
+  bool _showRecentOnly = true;
 
   Future<void> _refreshDashboard() async {
     await Future.delayed(const Duration(milliseconds: 500));
     setState(() {
-      // Trigger a full reload of DeliveriesSection
       _deliveriesKey = UniqueKey();
     });
   }
@@ -31,7 +30,6 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: Colors.white,
       drawer: const DashboardSidebar(),
       appBar: const DashboardHeader(),
-
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         color: const Color(0xFF2E7D32),
@@ -43,19 +41,78 @@ class _DashboardPageState extends State<DashboardPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const PayoutCard(),
-              //const SizedBox(height: 16),
-              //const SearchBarSection(),
               const SizedBox(height: 20),
               const AnnouncementsSection(),
               const SizedBox(height: 20),
-              // 👇 Rebuild this widget when key changes
-              DeliveriesSection(key: _deliveriesKey),
+              // 🔹 Better UI for Recently Scanned toggle
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _showRecentOnly = true;
+                        _deliveriesKey = UniqueKey();
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _showRecentOnly ? Colors.green : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: Text(
+                        'Recent',
+                        style: TextStyle(
+                          color: _showRecentOnly ? Colors.white : Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _showRecentOnly = false;
+                        _deliveriesKey = UniqueKey();
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: !_showRecentOnly ? Colors.green : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: Text(
+                        'All',
+                        style: TextStyle(
+                          color: !_showRecentOnly ? Colors.white : Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DeliveriesSection(
+                key: _deliveriesKey,
+                showRecentOnly: _showRecentOnly,
+              ),
               const SizedBox(height: 80),
             ],
           ),
         ),
       ),
-
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFFD2A679),
         foregroundColor: Colors.white,

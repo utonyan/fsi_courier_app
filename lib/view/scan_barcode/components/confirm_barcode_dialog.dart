@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../Dashboard/model/delivery_model.dart';
 import '../../Delivery_Details/delivery_details_page.dart';
 
@@ -17,54 +18,95 @@ class ConfirmBarcodeDialog extends StatelessWidget {
     this.isLandscape = false,
   });
 
-  //Online API loading 💀
   Future<void> _acceptBarcode(BuildContext context) async {
     try {
-      // 🔹 Fetch deliveries from your Laravel API
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+
+      if (token.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Not authenticated. Please log in."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      // 🔹 Fetch all deliveries
       final response = await http.get(
-        Uri.parse('http://10.10.10.53:8001/api/deliveries/'),
-        headers: {'Accept': 'application/json'},
+        Uri.parse('https://staging-gdtms-v2.skyward.com.ph/api/mbl/deliveries'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {
-        final List data = json.decode(response.body);
-        final List<Delivery> deliveries = data
-            .map((e) => Delivery.fromJson(e))
-            .toList();
+        final List data = json.decode(response.body)['data'];
+        final deliveries = data.map((e) => Delivery.fromJson(e)).toList();
 
-        // 🔹 Find delivery with matching barcode
-        final delivery = deliveries.cast<Delivery?>().firstWhere(
+        final matchedDelivery = deliveries.cast<Delivery?>().firstWhere(
           (d) => d?.barcodeValue == barcode,
-          orElse: () => null as Delivery?,
+          orElse: () => null,
         );
 
-        if (delivery != null) {
+        if (matchedDelivery != null) {
+          // 🔹 Save to cached recently scanned deliveries
+          const String cacheKey = 'recently_scanned_deliveries';
+          final jsonString = prefs.getString(cacheKey);
+          List<Delivery> currentList = [];
+
+          if (jsonString != null) {
+            final List<dynamic> cachedData = json.decode(jsonString);
+            currentList = cachedData.map((e) => Delivery.fromJson(e)).toList();
+          }
+
+          // Remove duplicate if exists and insert at top
+          currentList.removeWhere((d) => d.id == matchedDelivery.id);
+          currentList.insert(0, matchedDelivery);
+
+          // Save back to SharedPreferences
+          await prefs.setString(
+            cacheKey,
+            json.encode(currentList.map((d) => d.toJson()).toList()),
+          );
+
           Navigator.of(context).pop(); // Close dialog
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => DeliveryDetailsPage(delivery: delivery),
+              builder: (_) => DeliveryDetailsPage(delivery: matchedDelivery),
             ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("No delivery found for barcode $barcode")),
+            SnackBar(
+              content: Text("No delivery found for barcode $barcode"),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
-      } else {
+      } else if (response.statusCode == 401) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Failed to fetch deliveries (${response.statusCode})",
-            ),
+          const SnackBar(
+            content: Text("Unauthorized. Please log in again."),
+            backgroundColor: Colors.redAccent,
           ),
         );
+      } else {
+        throw Exception("Failed to fetch deliveries: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("Error fetching deliveries: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Error processing barcode")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error connecting to server: $e"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -78,13 +120,10 @@ class ConfirmBarcodeDialog extends StatelessWidget {
         onTap: () {}, // block taps on camera
         child: Stack(
           children: [
-            /// 🔲 Background blur & dim
             BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
               child: Container(color: Colors.black.withOpacity(0.5)),
             ),
-
-            /// 💬 Dialog card
             Center(
               child: FractionallySizedBox(
                 widthFactor: isLandscape ? 0.5 : (isSmall ? 0.9 : 0.85),
@@ -95,11 +134,11 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(isSmall ? 16 : 20),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
                         color: Colors.black26,
                         blurRadius: 20,
-                        offset: const Offset(0, 6),
+                        offset: Offset(0, 6),
                       ),
                     ],
                   ),
@@ -107,7 +146,6 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      /// 🧩 Icon header
                       CircleAvatar(
                         backgroundColor: Colors.green.withOpacity(0.1),
                         radius: isSmall ? 24 : (isLandscape ? 26 : 30),
@@ -118,8 +156,6 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 14),
-
-                      /// 🏷️ Title
                       Text(
                         "Confirm Barcode",
                         style: TextStyle(
@@ -129,8 +165,6 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      /// 📄 Content
                       Text(
                         "Do you want to accept this barcode?",
                         textAlign: TextAlign.center,
@@ -140,8 +174,6 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      /// 🧾 Barcode text
                       Container(
                         margin: const EdgeInsets.only(top: 8),
                         padding: const EdgeInsets.symmetric(
@@ -163,10 +195,7 @@ class ConfirmBarcodeDialog extends StatelessWidget {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
-                      /// 🔘 Buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [

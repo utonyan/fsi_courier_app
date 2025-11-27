@@ -7,78 +7,98 @@ import '../model/delivery_model.dart';
 import '../components/delivery_card.dart';
 
 class DeliveriesSection extends StatefulWidget {
-  const DeliveriesSection({super.key});
+  final bool showRecentOnly; // Filter flag
+
+  const DeliveriesSection({super.key, this.showRecentOnly = true});
 
   @override
   State<DeliveriesSection> createState() => _DeliveriesSectionState();
 }
 
 class _DeliveriesSectionState extends State<DeliveriesSection> {
-  final List<Delivery> _deliveries = [];
+  final List<Delivery> _deliveries = []; // All deliveries
   bool _isLoading = false;
-  bool _hasMore = true;
   int _currentPage = 1;
+  static const int _perPage = 5;
+  static const String _cacheKey = 'recently_scanned_deliveries';
 
   @override
   void initState() {
     super.initState();
-    _fetchDeliveries();
+    _loadDeliveries();
   }
 
-  Future<void> _fetchDeliveries() async {
-    if (_isLoading) return;
-
+  Future<void> _loadDeliveries() async {
     setState(() => _isLoading = true);
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("auth_token") ?? "";
+    final prefs = await SharedPreferences.getInstance();
 
-      final url = Uri.parse(
-        "https://staging-gdtms-v2.skyward.com.ph/api/mbl/deliveries"
-        "?active=true&per_page=5&page=$_currentPage",
-      );
-
-      final response = await http.get(
-        url,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final decoded = json.decode(response.body);
-        final List<dynamic> newData = decoded['data'];
-
-        List<Delivery> newDeliveries = newData
-            .map((e) => Delivery.fromJson(e))
-            .toList();
-
+    if (widget.showRecentOnly) {
+      // Load cached recent deliveries
+      final jsonString = prefs.getString(_cacheKey);
+      if (jsonString != null) {
+        final List<dynamic> data = json.decode(jsonString);
+        final cached = data.map((e) => Delivery.fromJson(e)).toList();
         setState(() {
           _deliveries.clear();
-          _deliveries.addAll(newDeliveries);
-          _hasMore = newDeliveries.length == 5;
+          _deliveries.addAll(cached);
         });
-      } else {
-        debugPrint("Failed: ${response.statusCode}");
       }
-    } catch (e) {
-      debugPrint("Error: $e");
+    } else {
+      // Fetch all deliveries from API
+      final token = prefs.getString('auth_token') ?? '';
+      final url = Uri.parse(
+        'https://staging-gdtms-v2.skyward.com.ph/api/mbl/deliveries?active=true&per_page=1000',
+      );
+
+      try {
+        final response = await http.get(
+          url,
+          headers: {'Authorization': 'Bearer $token'},
+        );
+
+        if (response.statusCode == 200) {
+          final decoded = json.decode(response.body);
+          final List<dynamic> data = decoded['data'];
+          final fetched = data.map((e) => Delivery.fromJson(e)).toList();
+          setState(() {
+            _deliveries.clear();
+            _deliveries.addAll(fetched);
+          });
+        } else {
+          debugPrint('Failed to fetch deliveries: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('Error fetching deliveries: $e');
+      }
     }
 
     setState(() => _isLoading = false);
   }
 
+  Future<void> addScannedDelivery(Delivery delivery) async {
+    final prefs = await SharedPreferences.getInstance();
+    _deliveries.removeWhere((d) => d.id == delivery.id);
+    _deliveries.insert(0, delivery);
+    setState(() {});
+    final jsonString = json.encode(_deliveries.map((d) => d.toJson()).toList());
+    await prefs.setString(_cacheKey, jsonString);
+  }
+
   void _previousPage() {
-    if (_currentPage > 1) {
-      setState(() => _currentPage--);
-      _fetchDeliveries();
-    }
+    if (_currentPage > 1) setState(() => _currentPage--);
   }
 
   void _nextPage() {
-    if (_hasMore) {
-      setState(() => _currentPage++);
-      _fetchDeliveries();
+    final totalPages = (_filteredDeliveries.length / _perPage).ceil();
+    if (_currentPage < totalPages) setState(() => _currentPage++);
+  }
+
+  List<Delivery> get _filteredDeliveries {
+    if (widget.showRecentOnly) {
+      return _deliveries.take(10).toList(); // show only recent
     }
+    return _deliveries; // show all
   }
 
   @override
@@ -90,60 +110,57 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
     }
 
     if (_deliveries.isEmpty) {
-      return const Center(child: Text("No deliveries found."));
+      return const Center(child: Text("No deliveries available."));
     }
+
+    final filtered = _filteredDeliveries;
+    final startIndex = (_currentPage - 1) * _perPage;
+    final endIndex = (_currentPage * _perPage).clamp(0, filtered.length);
+    final currentPageItems = filtered.sublist(startIndex, endIndex);
+    final totalPages = (filtered.length / _perPage).ceil();
 
     return Column(
       children: [
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: _deliveries.length,
+          itemCount: currentPageItems.length,
           itemBuilder: (context, index) {
-            return DeliveryCard(delivery: _deliveries[index]);
+            return DeliveryCard(delivery: currentPageItems[index]);
           },
         ),
-        const SizedBox(height: 1),
-
-        // ------------------------ IMPROVED CENTERED PAGINATION ------------------------
+        const SizedBox(height: 8),
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12.0,
-          ), // aligns with card edges
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Previous Button
                 GestureDetector(
-                  onTap: _currentPage > 1 && !_isLoading ? _previousPage : null,
+                  onTap: _currentPage > 1 ? _previousPage : null,
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _currentPage > 1 && !_isLoading
+                      color: _currentPage > 1
                           ? Colors.green.shade50
                           : Colors.grey.shade200,
                     ),
                     child: Icon(
                       Icons.arrow_left,
-                      color: _currentPage > 1 && !_isLoading
-                          ? Colors.green
-                          : Colors.grey,
+                      color: _currentPage > 1 ? Colors.green : Colors.grey,
                       size: 20,
                     ),
                   ),
                 ),
                 const SizedBox(width: 16),
-
-                // Page Number
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
                   ),
                   child: Text(
-                    "$_currentPage",
+                    "$_currentPage / $totalPages",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -152,21 +169,19 @@ class _DeliveriesSectionState extends State<DeliveriesSection> {
                   ),
                 ),
                 const SizedBox(width: 16),
-
-                // Next Button
                 GestureDetector(
-                  onTap: _hasMore && !_isLoading ? _nextPage : null,
+                  onTap: _currentPage < totalPages ? _nextPage : null,
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _hasMore && !_isLoading
+                      color: _currentPage < totalPages
                           ? Colors.green.shade50
                           : Colors.grey.shade200,
                     ),
                     child: Icon(
                       Icons.arrow_right,
-                      color: _hasMore && !_isLoading
+                      color: _currentPage < totalPages
                           ? Colors.green
                           : Colors.grey,
                       size: 20,

@@ -46,7 +46,7 @@ class Delivery {
     required this.barcodeValue,
     required this.product,
     required this.remarks,
-    this.media = const [], // default empty list
+    this.media = const [],
   });
 
   factory Delivery.fromJson(Map<String, dynamic> json) {
@@ -79,5 +79,34 @@ class Delivery {
               .toList() ??
           [],
     );
+  }
+
+  // ✅ Add this method to convert Delivery to JSON for caching
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'dispatch_code': dispatchCode,
+      'partial_code': partialCode,
+      'mail_type': mailType,
+      'tat': tat,
+      'transmittal_date': transmittalDate,
+      'delivery_status': status,
+      'delivery_trans_history': history,
+      'name': name,
+      'address': address,
+      'contact': contact,
+      'authorized_rep_1': authorizedRep1,
+      'contact_rep_1': contactRep1,
+      'authorized_rep_2': authorizedRep2,
+      'contact_rep_2': contactRep2,
+      'authorized_rep_3': authorizedRep3,
+      'contact_rep_3': contactRep3,
+      'special_instruction': specialInstruction,
+      'sequence_number': sequenceNumber,
+      'barcode_value': barcodeValue,
+      'product': product,
+      'remarks': remarks,
+      'media': media,
+    };
   }
 }
