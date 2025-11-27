@@ -13,7 +13,7 @@ class SplashScreen extends StatefulWidget {
     required this.text,
     this.backgroundColor = Colors.white,
     this.textStyle,
-    this.fadeDuration = const Duration(seconds: 2),
+    this.fadeDuration = const Duration(seconds: 1),
   });
 
   @override

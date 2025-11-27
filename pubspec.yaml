@@ -57,11 +57,15 @@ flutter_launcher_icons:
 flutter_native_splash:
   color: "#EC4455"
   image: assets/icons/kita_waton.png
+
   android: true
   ios: true
+
+  # Fit the image while keeping it centered
+  android_gravity: center
+  ios_content_mode: scaleAspectFit
+
   android_12:
-    image: assets/icons/kita_waton.png
     color: "#EC4455"
-    # add this to disable the icon mask
-    adaptive_icon_background: "#EC4455"  # same as your background
-    adaptive_icon_foreground: assets/icons/kita_waton.png
+    image: assets/icons/kita_waton4.png
+    android_gravity: center
